@@ -1,248 +1,324 @@
-import React, { useState, useEffect } from 'react';
+/* global __app_id, __firebase_config, __initial_auth_token */
+import React, { useState, useEffect, useMemo, useCallback } from 'react'; // Import useMemo and useCallback
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
-import HomePage from './components/HomePage';
+import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+
+import HomePage from './components/homepage';
 import DashboardLayout from './components/DashboardLayout';
 import AdminDashboardLayout from './components/AdminDashboardLayout';
-import { COLORS } from './constants'; // Assuming COLORS is defined here
-import GlassCard from './components/common/GlassCard'; // Make sure this path is correct
 
-// Firebase global variables (provided by Canvas environment)
-// IMPORTANT: For local development outside of Canvas, you MUST provide your own Firebase config here.
-// Replace "YOUR_..." placeholders with your actual Firebase project details if running locally.
-const firebaseConfig = typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : {
-    // Placeholder for local development if __firebase_config is not provided by Canvas
-    apiKey: "YOUR_FIREBASE_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID", // THIS IS THE CRITICAL FIELD
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_WEB_APP_ID"
-};
+import MessagePopup from './components/common/MessagePopup';
+import { COLORS, MEMBERSHIP_PLANS, getMembershipPlanByScore } from './constants';
 
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; // This appId is for Firestore paths
-
-// Log the Firebase config being used for debugging
-console.log("Firebase Config being used:", firebaseConfig);
-console.log("App ID being used:", appId);
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-function App() {
+const App = () => {
+    const [app, setApp] = useState(null);
+    const [db, setDb] = useState(null);
+    const [auth, setAuth] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [showLogin, setShowLogin] = useState(false); // State to control login form visibility
-    const [loginDiscordId, setLoginDiscordId] = useState('');
-    const [loginPassword, setLoginPassword] = useState('');
-    const [showRegister, setShowRegister] = useState(false); // State to control registration form visibility
-    const [registerName, setRegisterName] = useState('');
-    const [registerDiscordId, setRegisterDiscordId] = useState('');
-    const [registerRegion, setRegisterRegion] = useState('');
-    const [registerPassword, setRegisterPassword] = useState('');
-    const [registerInitialDeposit, setRegisterInitialDeposit] = useState('');
+    const [currentView, setCurrentView] = useState('home'); // 'home', 'dashboard', 'adminDashboard'
+    const [message, setMessage] = useState({ text: '', type: '' });
+
+    // Global variables from Canvas environment
+    // Use useMemo to ensure these are stable across renders, satisfying useEffect deps
+    const appId = useMemo(() => typeof __app_id !== 'undefined' ? __app_id : 'default-app-id', []);
+    const firebaseConfig = useMemo(() => typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {}, []);
+    const initialAuthToken = useMemo(() => typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null, []);
+
+    // Wrap showMessage in useCallback to make it stable
+    const showMessage = useCallback((text, type) => {
+        setMessage({ text, type });
+        setTimeout(() => setMessage({ text: '', type: '' }), 5000);
+    }, []); // Empty dependency array means this function is created once
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                const userDocRef = doc(db, `artifacts/${appId}/users`, user.uid);
-                const docSnap = await getDoc(userDocRef);
-                if (docSnap.exists()) {
-                    setUserProfile(docSnap.data());
+        // Initialize Firebase
+        // Only initialize if firebaseConfig is valid and app hasn't been initialized yet
+        if (Object.keys(firebaseConfig).length > 0 && !app) {
+            const firebaseApp = initializeApp(firebaseConfig);
+            setApp(firebaseApp);
+            setDb(getFirestore(firebaseApp));
+            setAuth(getAuth(firebaseApp));
+        }
+    }, [app, firebaseConfig]); // firebaseConfig is now a stable reference due to useMemo
+
+
+    useEffect(() => {
+        if (auth && db) { // Ensure auth and db are initialized
+            const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    // User is signed in, fetch profile
+                    const userDocRef = doc(db, `artifacts/${appId}/users`, user.uid);
+                    const docSnap = await getDoc(userDocRef);
+                    if (docSnap.exists()) {
+                        const profileData = { id: user.uid, ...docSnap.data() };
+                        setUserProfile(profileData);
+                        // Determine initial view based on role
+                        if (profileData.specialRole === 'Admin' || profileData.specialRole === 'Super Admin') {
+                            setCurrentView('adminDashboard');
+                        } else {
+                            setCurrentView('dashboard');
+                        }
+                    } else {
+                        // Profile not found, sign out or handle error
+                        console.error("User profile not found in Firestore for UID:", user.uid);
+                        showMessage("User profile data missing. Please contact support.", "error");
+                        auth.signOut(); // Force sign out if profile is missing
+                        setCurrentView('home');
+                    }
                 } else {
-                    // If user exists in auth but not in Firestore, might be a new anonymous user
-                    // or a deleted user. For now, we'll treat them as needing to register/login.
+                    // User is signed out
                     setUserProfile(null);
-                    setShowLogin(true); // Show login if no profile found
+                    setCurrentView('home');
                 }
-            } else {
-                setUserProfile(null);
-                setShowLogin(true); // Show login if no user is authenticated
-            }
-            setLoading(false);
-        });
+            });
 
-        const signIn = async () => {
-            try {
+            // Attempt to sign in with custom token if available
+            const signInWithToken = async () => {
                 if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
+                    try {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                        console.log("Signed in with custom token.");
+                    } catch (error) {
+                        console.error("Error signing in with custom token:", error);
+                        // Fallback to anonymous sign-in if custom token fails
+                        try {
+                            await signInAnonymously(auth);
+                            console.log("Signed in anonymously as fallback.");
+                        } catch (anonError) {
+                            console.error("Error signing in anonymously:", anonError);
+                            showMessage("Failed to authenticate. Please try again.", "error");
+                        }
+                    }
                 } else {
-                    await signInAnonymously(auth);
+                    // If no custom token, sign in anonymously for initial access
+                    try {
+                        await signInAnonymously(auth);
+                        console.log("Signed in anonymously (no initial token).");
+                    } catch (anonError) {
+                        console.error("Error signing in anonymously:", anonError);
+                        showMessage("Failed to authenticate. Please try again.", "error");
+                    }
                 }
-            } catch (error) {
-                console.error("Error signing in:", error);
-                alert("Failed to sign in. Please try again.");
-            }
-        };
+            };
 
-        signIn(); // Attempt to sign in on app load
+            signInWithToken(); // Call the sign-in function
 
-        return () => unsubscribe();
-    }, []); // Empty dependency array means this runs once on mount
+            return () => unsubscribe(); // Cleanup auth listener
+        }
+    }, [auth, db, appId, initialAuthToken, showMessage, setCurrentView]); // showMessage is now stable
 
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        setLoading(true);
+
+    // Helper functions for registration
+    const generateBankId = () => {
+        return 'BANK' + Math.floor(10000 + Math.random() * 90000).toString();
+    };
+
+    const generateKycCode = () => {
+        return 'KYC' + Math.floor(10000 + Math.random() * 90000).toString();
+    };
+
+    const generateRandomCardDetails = () => {
+        const generateSegment = () => Math.floor(1000 + Math.random() * 9000).toString();
+        const cardNumber = `4242 ${generateSegment()} ${generateSegment()} ${generateSegment()}`;
+        const currentYear = new Date().getFullYear();
+        const expiryYear = currentYear + 4; // Card valid for 4 years
+        const expiryMonth = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0'); // Random month 01-12
+        const expiryDate = new Date(expiryYear, parseInt(expiryMonth) - 1, 1); // For internal tracking
+        const expiry = `${expiryMonth}/${String(expiryYear).slice(-2)}`;
+        const cvv = Math.floor(100 + Math.random() * 900).toString();
+        const pin = Math.floor(1000 + Math.random() * 9000).toString();
+        return { number: cardNumber, expiry, expiryDate: expiryDate.toISOString(), cvv, pin, type: 'Debit' };
+    };
+
+    // handleLogin function for HomePage
+    const handleLogin = async (discordId, password) => {
+        if (!db || !auth) {
+            showMessage("Application not fully initialized. Please wait.", "error");
+            return;
+        }
         try {
-            // In a real app, you'd verify password against a stored hash.
-            // For this simulation, we'll just find the user by Discord ID and check if password matches (conceptually).
             const usersRef = collection(db, `artifacts/${appId}/users`);
-            const q = query(usersRef, where("discordId", "==", loginDiscordId));
+            const q = query(usersRef, where("discordId", "==", discordId), where("password", "==", password));
             const querySnapshot = await getDocs(q);
 
             if (!querySnapshot.empty) {
                 const userData = querySnapshot.docs[0].data();
-                // Conceptual password check (replace with actual bcrypt/hashing in production)
-                if (userData.password === loginPassword) { // DANGER: Never store plain passwords in production
-                    setUserProfile(userData);
-                    setShowLogin(false);
-                    alert('Login successful!');
+                const customToken = userData.customAuthToken; // Assuming you store a custom token for re-authentication
+                if (customToken) {
+                    await signInWithCustomToken(auth, customToken);
                 } else {
-                    alert('Invalid Discord ID or Password.');
+                    // Fallback to anonymous sign-in if no custom token (for initial setup)
+                    await signInAnonymously(auth);
                 }
+                setUserProfile({ id: querySnapshot.docs[0].id, ...userData });
+                showMessage('Login successful!', 'success');
+                setCurrentView(userData.specialRole === 'Admin' || userData.specialRole === 'Super Admin' ? 'adminDashboard' : 'dashboard');
             } else {
-                alert('User not found. Please register or check your Discord ID.');
+                showMessage('Invalid Discord ID or password.', 'error');
             }
         } catch (error) {
             console.error("Login error:", error);
-            alert(`Login failed: ${error.message}`);
-        } finally {
-            setLoading(false);
+            showMessage(`Login failed: ${error.message}`, 'error');
         }
     };
 
-    const handleRegister = async (e) => {
-        e.preventDefault();
-        setLoading(true);
+    // handleRegister function for HomePage
+    const handleRegister = async ({ rpName, discordId, password, confirmPassword, occupation, region }) => {
+        if (!db || !auth) {
+            showMessage("Application not fully initialized. Please wait.", "error");
+            return;
+        }
 
-        if (parseFloat(registerInitialDeposit) < 100) {
-            alert('Initial deposit must be at least 100 RUB.');
-            setLoading(false);
+        if (password !== confirmPassword) {
+            showMessage('Passwords do not match.', 'error');
             return;
         }
 
         try {
-            // Check if Discord ID or Bank ID already exists
-            const usersRef = collection(db, `artifacts/${appId}/users`);
-            const qDiscord = query(usersRef, where("discordId", "==", registerDiscordId));
-            const discordSnapshot = await getDocs(qDiscord);
-            if (!discordSnapshot.empty) {
-                alert('A user with this Discord ID already exists.');
-                setLoading(false);
+            // Check if Discord ID already exists
+            const discordIdQuery = query(collection(db, `artifacts/${appId}/users`), where("discordId", "==", discordId));
+            const discordIdSnap = await getDocs(discordIdQuery);
+
+            if (!discordIdSnap.empty) {
+                showMessage('Discord ID already registered.', 'error');
                 return;
             }
 
-            // Generate a simple Bank ID (e.g., SBR-BANK-XXXX)
-            const bankId = `SBR-BANK-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-            const kycCode = `KYC-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+            const bankId = generateBankId();
+            const kycCodeGenerated = generateKycCode();
+            const initialCreditScore = 500; // Starting credit score
+            const initialUserTier = getMembershipPlanByScore(initialCreditScore).name;
 
-            const newUserId = auth.currentUser.uid; // Use Firebase Auth UID as the document ID
+            const debitCardDetails = generateRandomCardDetails();
 
-            const newProfile = {
-                id: newUserId, // Store the Firebase Auth UID
-                name: registerName,
-                discordId: registerDiscordId,
-                bankId: bankId,
-                kycCode: kycCode,
-                region: registerRegion,
-                password: registerPassword, // DANGER: Never store plain passwords in production
-                balance: 0, // Initial balance before deposit is processed
-                accounts: {}, // Accounts will be populated upon approval
+            const newUser = {
+                name: rpName, // RP Name
+                discordId,
+                password, // In a real app, hash this!
+                occupation,
+                region,
+                bankId,
+                kycCode: kycCodeGenerated,
+                balance: 0.00,
+                accounts: {
+                    Personal: { balance: 0.00, accountNumber: Math.floor(1000000000 + Math.random() * 9000000000).toString() } // Initial Personal/Checking account
+                },
                 transactions: [],
-                dateJoined: new Date().toLocaleDateString('en-US'),
-                creditScore: 500, // Default credit score
-                hasCreditCard: false,
-                isFrozen: false, // Not frozen by default
+                loanHistory: [],
+                creditScore: initialCreditScore,
+                isFrozen: false,
                 specialRole: 'User', // Default role
                 isBusinessOwner: false,
-                businessRegistrationId: null, // New field for business linking
-                loanHistory: [],
+                businessRegistrationId: null,
                 isLoanBlacklisted: false,
-                isCreditFrozen: false, // For credit overuse penalties
-                creditFreezeEndDate: null,
+                isCreditFrozen: false,
                 isCreditCardSuspended: false,
-                creditCardSuspensionEndDate: null,
                 newLoanBlockedEndDate: null,
                 isSuspicious: false,
-                triggerInternalAffairs: false
+                triggerInternalAffairs: false,
+                isVIP: false,
+                isAdmin: false,
+                userTier: initialUserTier,
+                debitCard: debitCardDetails, // Assign generated debit card
+                hasCreditCard: false, // User starts without a credit card
+                creditCardInterestRate: 0.0, // Default to 0, updated on credit card approval
+                lastCreditCardPaymentDate: null,
+                missedCreditCardPayments: 0,
+                lastCreditCardInterestAppliedDate: null,
+                overCreditPenaltyApplied: false,
+                customAuthToken: null, // This would be generated server-side in a real app
             };
 
-            await setDoc(doc(db, `artifacts/${appId}/users`, newUserId), newProfile);
+            const userDocRef = doc(collection(db, `artifacts/${appId}/users`));
+            await setDoc(userDocRef, newUser);
 
-            // Submit an account creation request for admin approval
-            const accountRequestData = {
-                userId: newUserId,
-                userName: registerName,
-                discordId: registerDiscordId,
-                accountType: 'Personal', // Default to personal account on registration
-                initialDeposit: parseFloat(registerInitialDeposit),
-                status: 'Pending',
-                timestamp: new Date().toISOString(),
-                discordMessageLink: `https://discord.com/channels/@me/${registerDiscordId}` // Example link for proof
-            };
-            await addDoc(collection(db, `artifacts/${appId}/public/data/accountRequests`), accountRequestData);
-
-
-            setUserProfile(newProfile); // Set profile immediately, but account is pending approval
-            setShowRegister(false);
-            setShowLogin(false);
-            alert('Registration successful! Your account is pending admin approval for initial deposit and personal account creation.');
+            // Sign in the newly registered user
+            await signInAnonymously(auth); // Or use custom token if generated server-side
+            setUserProfile({ id: userDocRef.id, ...newUser });
+            showMessage('Registration successful! Welcome to Sberbank.', 'success');
+            setCurrentView('dashboard');
 
         } catch (error) {
             console.error("Registration error:", error);
-            alert(`Registration failed: ${error.message}`);
-        } finally {
-            setLoading(false);
+            showMessage(`Registration failed: ${error.message}`, 'error');
         }
     };
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen" style={{ backgroundColor: COLORS.background, color: COLORS.typography }}>
-                <p className="text-xl">Loading application...</p>
+
+    // Render content based on currentView
+    let content;
+    if (!db || !auth) {
+        content = (
+            <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: COLORS.background, color: COLORS.typography }}>
+                <p className="text-xl">Initializing application...</p>
             </div>
         );
+    } else {
+        switch (currentView) {
+            case 'home':
+                content = (
+                    <HomePage
+                        handleLogin={handleLogin}
+                        handleRegister={handleRegister}
+                        setCurrentView={setCurrentView}
+                        setUserProfile={setUserProfile}
+                        db={db}
+                        appId={appId}
+                        auth={auth}
+                        showMessage={showMessage}
+                    />
+                );
+                break;
+            case 'dashboard':
+                content = userProfile ? (
+                    <DashboardLayout
+                        userProfile={userProfile}
+                        setUserProfile={setUserProfile}
+                        setCurrentView={setCurrentView}
+                        db={db}
+                        appId={appId}
+                        auth={auth}
+                        showMessage={showMessage}
+                    />
+                ) : (
+                    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: COLORS.background, color: COLORS.typography }}>
+                        <p className="text-xl">Redirecting to login...</p>
+                    </div>
+                );
+                break;
+            case 'adminDashboard':
+                content = userProfile ? (
+                    <AdminDashboardLayout
+                        userProfile={userProfile}
+                        setUserProfile={setUserProfile}
+                        setCurrentView={setCurrentView}
+                        db={db}
+                        appId={appId}
+                        auth={auth}
+                        showMessage={showMessage}
+                    />
+                ) : (
+                    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: COLORS.background, color: COLORS.typography }}>
+                        <p className="text-xl">Redirecting to login...</p>
+                    </div>
+                );
+                break;
+            default:
+                content = (
+                    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: COLORS.background, color: COLORS.typography }}>
+                        <p className="text-xl">Page not found.</p>
+                    </div>
+                );
+        }
     }
 
-    // Render Admin Dashboard if user has 'Admin' or 'Super Admin' role
-    if (userProfile && (userProfile.specialRole === 'Admin' || userProfile.specialRole === 'Super Admin')) {
-        return <AdminDashboardLayout setUserProfile={setUserProfile} db={db} appId={appId} auth={auth} userProfile={userProfile} />;
-    }
-
-    // Render User Dashboard if user is logged in and not an admin
-    if (userProfile) {
-        return <DashboardLayout userProfile={userProfile} setUserProfile={setUserProfile} db={db} appId={appId} auth={auth} />;
-    }
-
-    // Render Home Page with Login/Register forms if not logged in
     return (
-        <HomePage
-            showLogin={showLogin}
-            setShowLogin={setShowLogin}
-            handleLogin={handleLogin}
-            loginDiscordId={loginDiscordId}
-            setLoginDiscordId={setLoginDiscordId}
-            loginPassword={loginPassword}
-            setLoginPassword={setLoginPassword}
-            showRegister={showRegister}
-            setShowRegister={setShowRegister}
-            handleRegister={handleRegister}
-            registerName={registerName}
-            setRegisterName={setRegisterName}
-            registerDiscordId={registerDiscordId}
-            setRegisterDiscordId={setRegisterDiscordId}
-            registerRegion={registerRegion}
-            setRegisterRegion={setRegisterRegion}
-            registerPassword={registerPassword}
-            setRegisterPassword={setRegisterPassword}
-            registerInitialDeposit={registerInitialDeposit}
-            setRegisterInitialDeposit={setRegisterInitialDeposit}
-        />
+        <>
+            {content}
+            {message.text && <MessagePopup message={message.text} type={message.type} />}
+        </>
     );
-}
+};
 
 export default App;

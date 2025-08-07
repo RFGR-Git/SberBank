@@ -1,410 +1,295 @@
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { getAuth, signInWithCustomToken, signInAnonymously } from 'firebase/auth';
+import { getFirestore, doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import GlassCard from './common/GlassCard';
-import { COLORS, REGION_CODES } from '../constants';
+import MessagePopup from './common/MessagePopup';
+import { COLORS, MEMBERSHIP_PLANS, getMembershipPlanByScore, REGION_CODES } from '../constants';
 
-const HomePage = ({ setIsLoggedIn, setIsAdminLoggedIn, setUserProfile, setCurrentView, auth, db, appId }) => {
-    const [rpName, setRpName] = useState('');
-    const [dob, setDob] = useState('');
-    const [placeOfBirth, setPlaceOfBirth] = useState('');
-    const [region, setRegion] = useState('');
-    const [gender, setGender] = useState('');
-    const [discordId, setDiscordId] = useState(''); // This state holds the Discord ID input
-    const [password, setPassword] = useState('');   // This state holds the password input
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [occupation, setOccupation] = useState('');
-    const [citizenshipStatus, setCitizenshipStatus] = useState('');
-    const [rpIdNumber, setRpIdNumber] = useState('');
+const HomePage = ({ setCurrentView, setUserProfile, db, appId, auth }) => {
+    const [isLogin, setIsLogin] = useState(true); // Controls whether it's login or register form
+    const [email, setEmail] = useState(''); // Email for login/registration
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState(''); // For registration
+    const [rpName, setRpName] = useState(''); // For registration
+    const [discordId, setDiscordId] = useState(''); // For registration/login (as a unique identifier)
+    const [occupation, setOccupation] = useState(''); // For registration
+    const [region, setRegion] = useState(''); // For registration
+    const [showPassword, setShowPassword] = useState(false);
+    const [message, setMessage] = useState({ text: '', type: '' });
 
-    const [isRegistering, setIsRegistering] = useState(true);
-    const [isAdminLogin, setIsAdminLogin] = useState(false);
-
-    // Function to generate a KYC code based on selected region and a unique ID
-    const generateKycCode = (selectedRegion) => {
-        const uniqueId = Math.floor(1000 + Math.random() * 9000); // 4-digit ID
-        const regionCode = REGION_CODES[selectedRegion] || 'UNK'; // Use region code or 'UNK' for unknown
-        const year = new Date().getFullYear();
-        return `KYC-${uniqueId}-${regionCode}-${year}`;
+    const showMessage = (text, type) => {
+        setMessage({ text, type });
+        setTimeout(() => setMessage({ text: '', type: '' }), 5000);
     };
 
-    // Function to generate a unique 8-digit bank ID
     const generateBankId = () => {
-        return Math.floor(10000000 + Math.random() * 90000000).toString();
+        return 'BANK' + Math.floor(10000 + Math.random() * 90000).toString();
     };
 
-    // Handle user registration
-    const handleUserRegister = async (e) => {
-        e.preventDefault(); // Prevent default form submission
-        if (password !== confirmPassword) {
-            alert('Passwords do not match.');
-            return;
-        }
-        if (password.length < 6) { // Basic password complexity check
-            alert('Password must be at least 6 characters long.');
-            return;
-        }
-
-        try {
-            // Firebase Auth requires an email format. Convert Discord ID to an email-like string.
-            const email = discordId.replace(/[^a-zA-Z0-9]/g, '') + "@sberbank.com";
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-
-            const newKycCode = generateKycCode(region);
-            const newBankId = generateBankId(); // Generate new bank ID
-            const currentDate = new Date().toLocaleDateString('en-US'); // Get current date in consistent format
-
-            // Create new user profile object with initial data
-            const newUserProfile = {
-                uid: user.uid,
-                name: rpName,
-                discordId,
-                bankId: newBankId, // Store the generated bank ID
-                dob,
-                placeOfBirth,
-                region,
-                gender,
-                occupation,
-                citizenshipStatus,
-                rpIdNumber,
-                kycCode: newKycCode,
-                dateJoined: currentDate,
-                balance: 0.00, // Initial balance
-                creditScore: 360, // All new users start at 360
-                hasCreditCard: false,
-                debitCard: null,
-                accounts: { // Initialize all account types to 0
-                    Personal: 0.00,
-                    Savings: 0.00,
-                    Business: 0.00,
-                    Government: 0.00,
-                    Investment: 0.00,
-                    CreditCard: 0.00,
-                    Shadow: 0.00,
-                },
-                transactions: [], // Empty array for transactions
-                budget: { income: 0, expenses: [] }, // Initial budget
-                investments: [], // Empty array for investments
-                isVIP: false, // Not VIP by default
-                isAdmin: false, // Not admin by default
-                loanHistory: [], // New: Track loan history for credit checks
-                missedPayments: 0, // New: Track missed payments for credit score
-                lastPaymentDate: new Date().toISOString(), // New: For tracking payment frequency
-            };
-
-            // Save the new user profile to Firestore
-            await setDoc(doc(db, `artifacts/${appId}/users`, user.uid), newUserProfile);
-
-            // Update parent component state to reflect login
-            setUserProfile(newUserProfile);
-            setIsLoggedIn(true);
-            setIsAdminLoggedIn(false);
-            setCurrentView('dashboard'); // Navigate to dashboard
-            alert(`Registration successful! Your Bank ID is: ${newBankId}. You can now open accounts from your dashboard.`);
-        } catch (error) {
-            console.error("Error during registration:", error);
-            alert(`Registration failed: ${error.message}`);
-        }
+    const generateKycCode = () => {
+        return 'KYC' + Math.floor(10000 + Math.random() * 90000).toString();
     };
 
-    // Handle user login
-    const handleUserLogin = async (e) => {
-        e.preventDefault(); // Prevent default form submission
-        if (!discordId || !password) {
-            alert('Please enter Discord ID and Password.');
-            return;
-        }
+    const generateRandomCardDetails = () => {
+        const generateSegment = () => Math.floor(1000 + Math.random() * 9000).toString();
+        const cardNumber = `4242 ${generateSegment()} ${generateSegment()} ${generateSegment()}`;
+        const currentYear = new Date().getFullYear();
+        const expiryYear = currentYear + 4; // Card valid for 4 years
+        const expiryMonth = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0'); // Random month 01-12
+        const expiryDate = new Date(expiryYear, parseInt(expiryMonth) - 1, 1); // For internal tracking
+        const expiry = `${expiryMonth}/${String(expiryYear).slice(-2)}`;
+        const cvv = Math.floor(100 + Math.random() * 900).toString();
+        const pin = Math.floor(1000 + Math.random() * 9000).toString();
+        return { number: cardNumber, expiry, expiryDate: expiryDate.toISOString(), cvv, pin, type: 'Debit' };
+    };
 
+    const handleAuth = async (e) => {
+        e.preventDefault();
         try {
-            // Convert Discord ID back to the email-like format for Firebase Auth
-            const email = discordId.replace(/[^a-zA-Z0-9]/g, '') + "@sberbank.com";
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
+            if (isLogin) {
+                // Login logic: Use discordId and password for login
+                const usersRef = collection(db, `artifacts/${appId}/users`);
+                const q = query(usersRef, where("discordId", "==", discordId), where("password", "==", password));
+                const querySnapshot = await getDocs(q);
 
-            // Fetch user profile from Firestore
-            const userDocRef = doc(db, `artifacts/${appId}/users`, user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-
-            if (userDocSnap.exists()) {
-                const userData = userDocSnap.data();
-                setUserProfile(userData);
-                setIsLoggedIn(true);
-                setIsAdminLoggedIn(userData.isAdmin || false); // Set admin status from Firestore data
-                setCurrentView(userData.isAdmin ? 'admin-dashboard' : 'dashboard'); // Navigate based on admin status
+                if (!querySnapshot.empty) {
+                    const userData = querySnapshot.docs[0].data();
+                    const customToken = userData.customAuthToken; // Assuming you store a custom token for re-authentication
+                    if (customToken) {
+                        await signInWithCustomToken(auth, customToken);
+                    } else {
+                        // Fallback to anonymous sign-in if no custom token (for initial setup)
+                        await signInAnonymously(auth);
+                    }
+                    setUserProfile({ id: querySnapshot.docs[0].id, ...userData });
+                    showMessage('Login successful!', 'success');
+                    setCurrentView(userData.specialRole === 'Admin' || userData.specialRole === 'Super Admin' ? 'adminDashboard' : 'dashboard');
+                } else {
+                    showMessage('Invalid Discord ID or password.', 'error');
+                }
             } else {
-                alert('User profile not found. Please register.');
-                await signOut(auth); // Sign out the user if their profile is missing
+                // Register logic
+                if (password !== confirmPassword) {
+                    showMessage('Passwords do not match.', 'error');
+                    return;
+                }
+
+                // Check if Discord ID already exists
+                const discordIdQuery = query(collection(db, `artifacts/${appId}/users`), where("discordId", "==", discordId));
+                const discordIdSnap = await getDocs(discordIdQuery);
+
+                if (!discordIdSnap.empty) {
+                    showMessage('Discord ID already registered.', 'error');
+                    return;
+                }
+
+                const bankId = generateBankId();
+                const kycCodeGenerated = generateKycCode();
+                const initialCreditScore = 500; // Starting credit score
+                const initialUserTier = getMembershipPlanByScore(initialCreditScore).name;
+
+                const debitCardDetails = generateRandomCardDetails();
+
+                const newUser = {
+                    name: rpName, // RP Name
+                    discordId,
+                    password, // In a real app, hash this!
+                    occupation,
+                    region,
+                    bankId,
+                    kycCode: kycCodeGenerated,
+                    balance: 0.00,
+                    accounts: {
+                        Personal: { balance: 0.00, accountNumber: Math.floor(1000000000 + Math.random() * 9000000000).toString() } // Initial Personal/Checking account
+                    },
+                    transactions: [],
+                    loanHistory: [],
+                    creditScore: initialCreditScore,
+                    isFrozen: false,
+                    specialRole: 'User', // Default role
+                    isBusinessOwner: false,
+                    businessRegistrationId: null,
+                    isLoanBlacklisted: false,
+                    isCreditFrozen: false,
+                    isCreditCardSuspended: false,
+                    newLoanBlockedEndDate: null,
+                    isSuspicious: false,
+                    triggerInternalAffairs: false,
+                    isVIP: false,
+                    isAdmin: false,
+                    userTier: initialUserTier,
+                    debitCard: debitCardDetails, // Assign generated debit card
+                    hasCreditCard: false, // User starts without a credit card
+                    creditCardInterestRate: 0.0, // Default to 0, updated on credit card approval
+                    lastCreditCardPaymentDate: null,
+                    missedCreditCardPayments: 0,
+                    lastCreditCardInterestAppliedDate: null,
+                    overCreditPenaltyApplied: false,
+                    customAuthToken: null, // This would be generated server-side in a real app
+                };
+
+                const userDocRef = doc(collection(db, `artifacts/${appId}/users`));
+                await setDoc(userDocRef, newUser);
+
+                // Sign in the newly registered user
+                await signInAnonymously(auth); // Or use custom token if generated server-side
+                setUserProfile({ id: userDocRef.id, ...newUser });
+                showMessage('Registration successful! Welcome to Sberbank.', 'success');
+                setCurrentView('dashboard');
+
             }
         } catch (error) {
-            console.error("Error during login:", error);
-            alert(`Login failed: ${error.message}`);
-        }
-    };
-
-    // Handle admin login
-    const handleAdminLogin = async (e) => {
-        e.preventDefault(); // Prevent default form submission
-        const adminEmail = "admin@sberbank.com"; // Fixed admin email for Firebase Auth
-        const adminPass = "adminpass"; // Fixed admin password
-
-        // Trim whitespace from inputs for robust comparison
-        const trimmedDiscordId = discordId.trim();
-        const trimmedPassword = password.trim();
-
-        console.log("Admin Login Attempt:");
-        console.log("  Input Discord ID:", `'${trimmedDiscordId}'`, "Length:", trimmedDiscordId.length);
-        console.log("  Expected Discord ID:", `'Admin#0000'`, "Length:", 'Admin#0000'.length);
-        console.log("  Input Password:", `'${trimmedPassword}'`, "Length:", trimmedPassword.length);
-        console.log("  Expected Password:", `'adminpass'`, "Length:", 'adminpass'.length);
-        console.log("  Discord ID Match:", trimmedDiscordId === 'Admin#0000');
-        console.log("  Password Match:", trimmedPassword === adminPass);
-
-        // Check if provided credentials match the hardcoded admin credentials
-        if (trimmedDiscordId !== 'Admin#0000' || trimmedPassword !== adminPass) {
-            alert('Invalid admin credentials.');
-            return;
-        }
-
-        try {
-            let adminUser = null;
-            try {
-                // Attempt to sign in the admin user
-                const userCredential = await signInWithEmailAndPassword(auth, adminEmail, adminPass);
-                adminUser = userCredential.user;
-            } catch (loginError) {
-                // If admin user not found (first time setup), create it
-                if (loginError.code === 'auth/user-not-found' || loginError.code === 'auth/wrong-password' || loginError.code === 'auth/invalid-credential') {
-                    console.log("Admin user not found or invalid credentials, attempting to create it.");
-                    const userCredential = await createUserWithEmailAndPassword(auth, adminEmail, adminPass);
-                    adminUser = userCredential.user;
-                    // Set admin profile in Firestore upon creation
-                    await setDoc(doc(db, `artifacts/${appId}/users`, adminUser.uid), {
-                        uid: adminUser.uid,
-                        name: 'Sberbank Admin',
-                        discordId: 'Admin#0000',
-                        bankId: '00000000', // Fixed bank ID for admin
-                        kycCode: 'KYC-ADMIN-SBR-2025',
-                        dateJoined: new Date().toLocaleDateString('en-US'),
-                        region: 'Headquarters',
-                        isVIP: true, // Admins are VIP
-                        isAdmin: true, // Mark as admin
-                        balance: 0.00,
-                        creditScore: 850,
-                        hasCreditCard: true,
-                        debitCard: null,
-                        accounts: {
-                            Personal: 0.00, Savings: 0.00, Business: 0.00, Government: 0.00, Investment: 0.00, CreditCard: 0.00, Shadow: 0.00
-                        },
-                        transactions: [], budget: { income: 0, expenses: [] }, investments: [],
-                        loanHistory: [],
-                        missedPayments: 0,
-                        lastPaymentDate: new Date().toISOString(),
-                    });
-                    alert('Admin account created and logged in.');
-                } else {
-                    throw loginError; // Re-throw other Firebase errors
-                }
-            }
-
-            // After successful sign-in (or creation), verify admin status from Firestore
-            if (adminUser) {
-                const adminDocRef = doc(db, `artifacts/${appId}/users`, adminUser.uid);
-                const adminDocSnap = await getDoc(adminDocRef);
-                if (adminDocSnap.exists() && adminDocSnap.data().isAdmin) {
-                    setUserProfile(adminDocSnap.data());
-                    setIsLoggedIn(true);
-                    setIsAdminLoggedIn(true);
-                    setCurrentView('admin-dashboard'); // Navigate to admin dashboard
-                } else {
-                    alert('Admin profile not found or not marked as admin. Please ensure correct credentials and admin role.');
-                    await signOut(auth); // Sign out if not a valid admin profile
-                }
-            }
-        } catch (error) {
-            console.error("Error during admin login:", error);
-            alert(`Admin login failed: ${error.message}`);
+            console.error("Authentication error:", error);
+            showMessage(`Authentication failed: ${error.message}`, 'error');
         }
     };
 
     return (
-        <div className="container mx-auto px-4 py-16 flex items-center justify-center min-h-[calc(100vh-160px)]">
-            <GlassCard className="p-10 w-full max-w-md text-center">
-                <h2 className="text-4xl font-extrabold mb-8 drop-shadow-sm" style={{ color: COLORS.primaryAccent }}>Welcome to Sberbank</h2>
+        <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: COLORS.background }}>
+            <GlassCard className="p-8 w-full max-w-md">
+                <h2 className="text-4xl font-bold text-center mb-8" style={{ color: COLORS.primaryAccent }}>
+                    {isLogin ? 'Login' : 'Register'}
+                </h2>
 
-                {/* Toggle buttons for Register, Login, Admin Login */}
-                <div className="flex justify-center mb-6 space-x-4">
-                    <button
-                        onClick={() => { setIsRegistering(true); setIsAdminLogin(false); }}
-                        className={`px-6 py-2 rounded-full font-bold transition-all duration-300 ${isRegistering && !isAdminLogin ? 'bg-green-700 text-white shadow-lg' : 'bg-transparent text-gray-400 border border-gray-600'}`}
-                        style={isRegistering && !isAdminLogin ? { boxShadow: `0 0 10px ${COLORS.buttonsGlow}` } : {}}
-                    >
-                        Register
-                    </button>
-                    <button
-                        onClick={() => { setIsRegistering(false); setIsAdminLogin(false); }}
-                        className={`px-6 py-2 rounded-full font-bold transition-all duration-300 ${!isRegistering && !isAdminLogin ? 'bg-green-700 text-white shadow-lg' : 'bg-transparent text-gray-400 border border-gray-600'}`}
-                        style={!isRegistering && !isAdminLogin ? { boxShadow: `0 0 10px ${COLORS.buttonsGlow}` } : {}}
-                    >
-                        Login
-                    </button>
-                    <button
-                        onClick={() => { setIsAdminLogin(true); setIsRegistering(false); }}
-                        className={`px-6 py-2 rounded-full font-bold transition-all duration-300 ${isAdminLogin ? 'bg-red-700 text-white shadow-lg' : 'bg-transparent text-gray-400 border border-gray-600'}`}
-                        style={isAdminLogin ? { boxShadow: `0 0 10px rgba(255, 0, 0, 0.5)` } : {}}
-                    >
-                        Admin Login
-                    </button>
-                </div>
+                <form onSubmit={handleAuth} className="space-y-6">
+                    {/* Registration Fields (conditionally rendered) */}
+                    {!isLogin && (
+                        <>
+                            <div>
+                                <label htmlFor="rpName" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>RP Name</label>
+                                <input
+                                    type="text"
+                                    id="rpName"
+                                    value={rpName}
+                                    onChange={(e) => setRpName(e.target.value)}
+                                    placeholder="Your Roleplay Name"
+                                    className="w-full p-3 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                                    style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }}
+                                    required={!isLogin}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="occupation" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Occupation</label>
+                                <input
+                                    type="text"
+                                    id="occupation"
+                                    value={occupation}
+                                    onChange={(e) => setOccupation(e.target.value)}
+                                    placeholder="e.g., Engineer, Doctor"
+                                    className="w-full p-3 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                                    style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }}
+                                    required={!isLogin}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="region" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Region</label>
+                                <select
+                                    id="region"
+                                    value={region}
+                                    onChange={(e) => setRegion(e.target.value)}
+                                    className="w-full p-3 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                                    style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }}
+                                    required={!isLogin}
+                                >
+                                    <option value="">Select your region</option>
+                                    {REGION_CODES.map((r) => (
+                                        <option key={r} value={r}>{r}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </>
+                    )}
 
-                {/* Conditional rendering of login/registration forms */}
-                {isAdminLogin ? (
-                    // Admin Login Form
-                    <form onSubmit={handleAdminLogin} className="space-y-6">
-                        <p className="text-lg mb-2" style={{ color: COLORS.typography }}>Admin Login</p>
-                        <div>
-                            <label htmlFor="adminDiscordId" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Admin Discord ID</label>
+                    {/* Common Fields for both Login and Registration */}
+                    <div>
+                        <label htmlFor="discordId" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Discord ID</label>
+                        <input
+                            type="text"
+                            id="discordId"
+                            value={discordId}
+                            onChange={(e) => setDiscordId(e.target.value)}
+                            placeholder="yourdiscord#1234"
+                            className="w-full p-3 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                            style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="password" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Password</label>
+                        <div className="relative">
                             <input
-                                type="text"
-                                id="adminDiscordId"
-                                value={discordId}
-                                onChange={(e) => setDiscordId(e.target.value)}
-                                placeholder="Admin#0000"
-                                className="w-full p-3 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-                                style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="adminPassword" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Password</label>
-                            <input
-                                type="password"
-                                id="adminPassword"
+                                type={showPassword ? 'text' : 'password'}
+                                id="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="********"
-                                className="w-full p-3 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 transition-all duration-200"
+                                className="w-full p-3 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 transition-all duration-200 pr-10"
                                 style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }}
                                 required
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-200"
+                            >
+                                {showPassword ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye-off"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.54 18.54 0 0 1 2.21-3.6l-1.5-1.5M1.49 1.49 22.51 22.51"/><path d="M9.9 4.24A9.9 9.9 0 0 1 12 4c7 0 11 8 11 8a18.54 18.54 0 0 1-2.21 3.6l-2.81-2.81"/><path d="M14.9 14.9a3 3 0 0 1-4.24-4.24"/></svg>
+                                ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                )}
+                            </button>
                         </div>
-                        <button
-                            type="submit"
-                            className="w-full font-bold py-3 px-6 rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300"
-                            style={{ backgroundColor: COLORS.primaryAccent, color: COLORS.background, boxShadow: `0 0 15px ${COLORS.buttonsGlow}` }}
-                        >
-                            Admin Login
-                        </button>
-                    </form>
-                ) : isRegistering ? (
-                    // User Registration Form
-                    <form onSubmit={handleUserRegister} className="space-y-6">
-                        <p className="text-lg mb-2" style={{ color: COLORS.typography }}>Create your new Sberbank website account.</p>
-                        {/* Basic Roleplay Details */}
-                        <h3 className="text-xl font-semibold mt-6" style={{ color: COLORS.primaryAccent }}>Basic Roleplay Details</h3>
-                        <div>
-                            <label htmlFor="rpName" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Roleplay Name</label>
-                            <input type="text" id="rpName" value={rpName} onChange={(e) => setRpName(e.target.value)} placeholder="Comrade Ivanov" className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} required />
-                        </div>
-                        <div>
-                            <label htmlFor="dob" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Date of Birth</label>
-                            <input type="date" id="dob" value={dob} onChange={(e) => setDob(e.target.value)} className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} required />
-                        </div>
-                        <div>
-                            <label htmlFor="placeOfBirth" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Place of Birth</label>
-                            <input type="text" id="placeOfBirth" value={placeOfBirth} onChange={(e) => setPlaceOfBirth(e.target.value)} placeholder="Volgograd" className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} required />
-                        </div>
-                        <div>
-                            <label htmlFor="region" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Current Region of Residence</label>
-                            <select id="region" value={region} onChange={(e) => setRegion(e.target.value)} className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} required>
-                                <option value="">Select Region</option>
-                                {Object.keys(REGION_CODES).map(regionName => (
-                                    <option key={regionName} value={regionName}>{regionName}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="gender" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Gender (Optional)</label>
-                            <input type="text" id="gender" value={gender} onChange={(e) => setGender(e.target.value)} placeholder="Male/Female/Other" className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} />
-                        </div>
+                    </div>
 
-                        {/* Account Credentials */}
-                        <h3 className="text-xl font-semibold mt-6" style={{ color: COLORS.primaryAccent }}>Account Credentials</h3>
-                        <div>
-                            <label htmlFor="discordId" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Discord User ID (e.g., YourDiscord#1234)</label>
-                            <input type="text" id="discordId" value={discordId} onChange={(e) => setDiscordId(e.target.value)} placeholder="YourDiscord#1234" className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} required />
-                        </div>
-                        <div>
-                            <label htmlFor="password" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Create Password</label>
-                            <input type="password" id="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="********" className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} required />
-                        </div>
+                    {/* Confirm Password (only for Registration) */}
+                    {!isLogin && (
                         <div>
                             <label htmlFor="confirmPassword" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Confirm Password</label>
-                            <input type="password" id="confirmPassword" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="********" className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} required />
-                        </div>
-
-                        {/* Additional RP Role Information (Optional) */}
-                        <h3 className="text-xl font-semibold mt-6" style={{ color: COLORS.primaryAccent }}>Additional RP Role Information (Optional)</h3>
-                        <div>
-                            <label htmlFor="occupation" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Occupation or Role in RP</label>
-                            <input type="text" id="occupation" value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="Citizen, Business Owner, etc." className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} />
-                        </div>
-                        <div>
-                            <label htmlFor="citizenshipStatus" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Citizenship Status or Immigration Status</label>
-                            <input type="text" id="citizenshipStatus" value={citizenshipStatus} onChange={(e) => setCitizenshipStatus(e.target.value)} placeholder="Citizen, Immigrant" className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} />
-                        </div>
-                        <div>
-                            <label htmlFor="rpIdNumber" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>RP Identification Number (if applicable)</label>
-                            <input type="text" id="rpIdNumber" value={rpIdNumber} onChange={(e) => setRpIdNumber(e.target.value)} placeholder="RP-XXXX-YYYY" className="w-full p-3 border border-gray-600 rounded-lg" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }} />
-                        </div>
-
-                        <button
-                            type="submit"
-                            className="w-full font-bold py-3 px-6 rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300"
-                            style={{ backgroundColor: COLORS.primaryAccent, color: COLORS.background, boxShadow: `0 0 15px ${COLORS.buttonsGlow}` }}
-                        >
-                            Register Account
-                        </button>
-                    </form>
-                ) : (
-                    // User Login Form
-                    <form onSubmit={handleUserLogin} className="space-y-6">
-                        <p className="text-lg mb-2" style={{ color: COLORS.typography }}>Log in to your existing account.</p>
-                        <div>
-                            <label htmlFor="loginDiscordId" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Discord User ID</label>
-                            <input
-                                type="text"
-                                id="loginDiscordId"
-                                value={discordId}
-                                onChange={(e) => setDiscordId(e.target.value)}
-                                placeholder="YourDiscord#1234"
-                                className="w-full p-3 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 transition-all duration-200"
-                                style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }}
-                                required
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="loginPassword" className="block text-lg font-medium mb-2" style={{ color: COLORS.typography }}>Password</label>
                             <input
                                 type="password"
-                                id="loginPassword"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                id="confirmPassword"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
                                 placeholder="********"
                                 className="w-full p-3 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 transition-all duration-200"
                                 style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography }}
-                                required
+                                required={!isLogin}
                             />
                         </div>
-                        <button
-                            type="submit"
-                            className="w-full font-bold py-3 px-6 rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300"
-                            style={{ backgroundColor: COLORS.primaryAccent, color: COLORS.background, boxShadow: `0 0 15px ${COLORS.buttonsGlow}` }}
-                        >
-                            Login
-                        </button>
-                    </form>
-                )}
+                    )}
+
+                    <button
+                        type="submit"
+                        className="w-full font-bold py-3 px-6 rounded-lg shadow-lg transform hover:scale-105 transition-all duration-300"
+                        style={{ backgroundColor: COLORS.primaryAccent, color: COLORS.background, boxShadow: `0 0 15px ${COLORS.buttonsGlow}` }}
+                    >
+                        {isLogin ? 'Login' : 'Register Account'}
+                    </button>
+                </form>
+
+                {/* Toggle between Login and Register */}
+                <p className="text-center mt-6 text-gray-400">
+                    {isLogin ? "Don't have an account? " : "Already have an account? "}
+                    <button
+                        onClick={() => {
+                            setIsLogin(!isLogin);
+                            // Clear form fields when toggling
+                            setEmail('');
+                            setPassword('');
+                            setConfirmPassword('');
+                            setRpName('');
+                            setDiscordId('');
+                            setOccupation('');
+                            setRegion('');
+                            setMessage({ text: '', type: '' }); // Clear any messages
+                        }}
+                        className="font-semibold"
+                        style={{ color: COLORS.primaryAccent }}
+                    >
+                        {isLogin ? 'Register' : 'Login'}
+                    </button>
+                </p>
+                {message.text && <MessagePopup message={message.text} type={message.type} />}
             </GlassCard>
         </div>
     );

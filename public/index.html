@@ -1,8 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Use direct absolute path for favicon -->
+    <link rel="icon" href="https://rfgr-git.github.io/SberBank-Banking/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Sberbank Banking Platform"
+    />
+    <!-- Use direct absolute path for apple-touch-icon -->
+    <link rel="apple-touch-icon" href="https://rfgr-git.github.io/SberBank-Banking/logo192.png" />
+    <!-- Use direct absolute path for manifest.json -->
+    <link rel="manifest" href="https://rfgr-git.github.io/SberBank-Banking/manifest.json" />
+
     <title>Sberbank Banking Platform</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,9 +25,12 @@
             font-family: 'Inter', sans-serif;
         }
     </style>
-</head>
-<body>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
-    <script type="module" src="/src/index.js"></script>
-</body>
+    <!--
+      The build step will place the bundled scripts into the <body> tag.
+    -->
+  </body>
 </html>
