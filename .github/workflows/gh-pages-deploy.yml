@@ -1,0 +1,13 @@
+name: Run on gh-pages Deploy
+
+on:
+  push:
+    branches:
+      - gh-pages
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print deployment notification
+        run: echo "Deployment to gh-pages branch detected!"

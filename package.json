@@ -2,7 +2,7 @@
   "name": "sberbank-platform",
   "version": "1.0.0",
   "private": true,
-  "homepage": "https://rfgr-git.github.io/SberBank/",
+  "homepage": "https://rfgr-git.github.io/SberBank",
   "dependencies": {
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
@@ -20,7 +20,7 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "predeploy": "npm run build",
-  "deploy": "gh-pages -d build --remove \"*\""
+    "deploy": "gh-pages -d build --remove \"*\""
   },
   "eslintConfig": {
     "extends": [
