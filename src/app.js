@@ -5,7 +5,7 @@ import { getFirestore, doc, getDoc, setDoc, collection, query, where, getDocs } 
 import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 import HomePage from './components/homepage';
-import DashboardLayout from './components/DashboardLayout';
+import DashboardLayout from './components/dashboardlayout';
 import AdminDashboardLayout from './components/AdminDashboardLayout';
 
 import MessagePopup from './components/common/MessagePopup';

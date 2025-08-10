@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { doc, updateDoc, addDoc, collection } from 'firebase/firestore';
-import GlassCard from './common/GlassCard';
+import GlassCard from './common/glasscard';
 import { COLORS } from '../constants';
 
 const OpenSpecificAccountPage = ({ type, userProfile, setUserProfile, setCurrentView, db, appId, auth }) => {

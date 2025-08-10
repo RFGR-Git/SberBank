@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { collection, query, getDocs, doc, updateDoc, deleteDoc, runTransaction, getDoc, addDoc, where } from 'firebase/firestore';
-import GlassCard from './common/GlassCard';
+import GlassCard from './common/glasscard';
 import MessagePopup from './common/MessagePopup';
 import { COLORS, MEMBERSHIP_PLANS } from '../constants';
 import { User, Briefcase, DollarSign, Ban, CheckCircle, XCircle, Search, LogOut, Trash2, Edit, PlusCircle, CreditCard, ShieldOff, Lock, Unlock, Gavel, UserCog } from 'lucide-react';

@@ -1,5 +1,5 @@
 import React from 'react';
-import GlassCard from './common/GlassCard';
+import GlassCard from './common/glasscard';
 import { COLORS } from '../constants';
 import { UserRoundCog, PiggyBank, Briefcase, Landmark, CreditCard, TrendingUp, UserRoundSearch } from 'lucide-react';
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { doc, updateDoc, getDoc } from 'firebase/firestore';
-import GlassCard from './common/GlassCard';
+import GlassCard from './common/glasscard';
 import { COLORS } from '../constants';
 
 const BusinessBankingLayout = ({ userProfile, db, appId, auth }) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { doc, updateDoc, collection, query, where, getDocs, getDoc, addDoc, onSnapshot } from 'firebase/firestore';
-import GlassCard from './common/GlassCard';
+import GlassCard from './common/glasscard';
 import { COLORS } from '../constants';
 import { CreditCard, DollarSign, FileText, BarChart, Lock, Shield, TrendingUp, Landmark, Truck, Building, FileBadge, Coins, Package, MapPin } from 'lucide-react';
 

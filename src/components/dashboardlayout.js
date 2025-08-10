@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { doc, updateDoc, collection, addDoc, getDoc, deleteDoc, runTransaction, query, where, getDocs } from 'firebase/firestore';
-import GlassCard from './common/GlassCard';
+import GlassCard from './common/glasscard';
 import { COLORS, PENALTY_RULES, MEMBERSHIP_PLANS, getMembershipPlanByScore, getMembershipPlanByName } from '../constants';
 import { UserCog, Briefcase, Landmark, TrendingUp, PiggyBank, CreditCard, PlusCircle, FileText, Shield, DollarSign, Wallet, Banknote, ArrowLeftRight, Home, LogOut, Info, ReceiptText, Lock, LayoutDashboard, WalletCards, History, Scale, TrendingUpIcon, Settings } from 'lucide-react'; // Added Settings icon
 
@@ -843,6 +843,13 @@ const DashboardLayout = ({ userProfile, setUserProfile, setCurrentView, db, appI
         setShowAccountCardModal(true);
     };
 
+    const getDisplayCardLabel = (details) => {
+        if (!details) return '';
+        if (details.generic) return `${details.accountType} Account`;
+        if (details.type === 'Credit') return 'Credit Card';
+        if (details.type === 'Business Debit') return 'Business Debit Card';
+        return `${details.accountType} ${details.type} Card`;
+    };
 
     return (
         <div className="min-h-screen flex flex-col items-center p-8" style={{ backgroundColor: COLORS.background, color: COLORS.typography }}>
@@ -1876,12 +1883,12 @@ const DashboardLayout = ({ userProfile, setUserProfile, setCurrentView, db, appI
             {showAccountCardModal && selectedAccountCardDetails && (
                 <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
                     <GlassCard className="p-8 w-full max-w-md max-h-[90vh] overflow-y-auto">
-                        <h3 className="text-3xl font-bold mb-6 text-center" style={{ color: COLORS.primaryAccent }}>Your {selectedAccountCardDetails.accountType} Card</h3>
+                        <h3 className="text-3xl font-bold mb-6 text-center" style={{ color: COLORS.primaryAccent }}>Your {getDisplayCardLabel(selectedAccountCardDetails)}</h3>
                         <div className="relative p-6 rounded-lg shadow-lg overflow-hidden" style={{ backgroundColor: COLORS.secondaryAccent, color: COLORS.typography, minHeight: '200px' }}>
                             <div className="absolute inset-0 bg-gradient-to-br from-[#00FFAA10] to-[#0D0D0D] opacity-20 z-0"></div>
                             <div className="relative z-10">
                                 <div className="flex justify-between items-start mb-4">
-                                    <span className="text-lg font-semibold">{selectedAccountCardDetails.accountType} {selectedAccountCardDetails.type} Card</span>
+                                    <span className="text-lg font-semibold">{getDisplayCardLabel(selectedAccountCardDetails)}</span>
                                     {selectedAccountCardDetails.type === 'Debit' && <img src="https://placehold.co/40x25/00FFAA/0D0D0D?text=VISA" alt="Visa Logo" className="h-6" />}
                                     {selectedAccountCardDetails.type === 'Credit' && <img src="https://placehold.co/40x25/00FFAA/0D0D0D?text=VISA" alt="Visa Logo" className="h-6" />}
                                     {selectedAccountCardDetails.type === 'Business Debit' && <Briefcase size={30} style={{ color: COLORS.primaryAccent }} />}
