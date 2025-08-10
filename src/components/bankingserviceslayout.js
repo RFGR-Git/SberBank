@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { doc, updateDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore'; // Added query, where, getDocs, addDoc
-import GlassCard from './common/GlassCard';
+import GlassCard from './common/glasscard';
 import { COLORS } from '../constants';
 
 const BankingServicesLayout = ({ userProfile, setUserProfile, db, appId, auth }) => {

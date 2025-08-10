@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { getAuth, signInWithCustomToken, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import GlassCard from './common/GlassCard';
+import GlassCard from './common/glasscard';
 import MessagePopup from './common/MessagePopup';
 import { COLORS, MEMBERSHIP_PLANS, getMembershipPlanByScore, REGION_CODES } from '../constants';
 
