@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.js": "/SberBank/static/js/main.3595b78c.js",
+    "main.js": "/SberBank/static/js/main.c56ba876.js",
     "index.html": "/SberBank/index.html",
-    "main.3595b78c.js.map": "/SberBank/static/js/main.3595b78c.js.map"
+    "main.c56ba876.js.map": "/SberBank/static/js/main.c56ba876.js.map"
   },
   "entrypoints": [
-    "static/js/main.3595b78c.js"
+    "static/js/main.c56ba876.js"
   ]
 }
