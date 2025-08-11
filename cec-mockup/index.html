@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CEC Mockup — Election Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">CEC</div>
+          <div class="brand-text">
+            Central Election Commission
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active" data-view="home">Home</button>
+          <button class="nav-item" data-view="presidential">Presidential Tracker</button>
+          <button class="nav-item" data-view="duma">State Duma Tracker</button>
+          <button class="nav-item" data-view="general">General (All)</button>
+          <div class="nav-sep"></div>
+          <button class="nav-item" data-view="prices">Campaign Prices & Penalties</button>
+          <button class="nav-item" data-view="rulebook">CEC Rulebook</button>
+          <button class="nav-item" data-view="how">How to Campaign</button>
+          <button class="nav-item" data-view="calendar">Calendar & Updates</button>
+          <div class="nav-sep"></div>
+          <button class="nav-item" data-view="admin">Admin</button>
+        </nav>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <h1 id="view-title">Home</h1>
+        </header>
+
+        <section id="view-home" class="view visible">
+          <div class="hero">
+            <h2>Welcome to the CEC Election Tracker</h2>
+            <p>Track live results for the Presidential election and State Duma seats. Hover over a region or seat to view candidates, party, and live percentages. Winners are marked with a checkmark.</p>
+            <div class="hero-actions">
+              <button class="btn primary" data-view-jump="presidential">Open Presidential Tracker</button>
+              <button class="btn" data-view-jump="duma">Open Duma Tracker</button>
+            </div>
+          </div>
+
+          <div class="home-panels">
+            <div class="panel">
+              <h3>Presidential — Regions</h3>
+              <div class="legend" id="legend-pres"></div>
+              <div id="pres-mini"></div>
+            </div>
+            <div class="panel">
+              <h3>State Duma — Seats</h3>
+              <div id="duma-mini" class="mini-grid"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-presidential" class="view">
+          <div class="tabs">
+            <button class="tab active" data-tab="map">Map</button>
+            <button class="tab" data-tab="table">Table</button>
+          </div>
+
+          <div class="tab-content visible" data-tab-panel="map">
+            <div class="map-layout">
+              <div class="map-legend" id="map-legend"></div>
+              <div class="map-wrap">
+                <!-- Schematic map (mockup) with 6 regions as clickable tiles -->
+                <svg id="pres-map" viewBox="0 0 1200 600" role="img" aria-label="Schematic map of regions">
+                  <!-- Northern Frontier (Dark Green) -->
+                  <g class="region" data-region-id="northern_frontier" data-name="Northern Frontier">
+                    <rect x="50" y="40" width="300" height="220" rx="16" ry="16" class="region-tile region-northern_frontier" />
+                    <text x="200" y="150" class="region-label">Northern Frontier</text>
+                  </g>
+                  <!-- Volga Valley (Red) -->
+                  <g class="region" data-region-id="volga_valley" data-name="Volga Valley">
+                    <rect x="380" y="80" width="300" height="200" rx="16" ry="16" class="region-tile region-volga_valley" />
+                    <text x="530" y="170" class="region-label">Volga Valley</text>
+                  </g>
+                  <!-- Caucasia (Yellow) -->
+                  <g class="region" data-region-id="caucasia" data-name="Caucasia">
+                    <rect x="330" y="310" width="300" height="200" rx="16" ry="16" class="region-tile region-caucasia" />
+                    <text x="480" y="410" class="region-label">Caucasia</text>
+                  </g>
+                  <!-- Central Steppes (Orange) -->
+                  <g class="region" data-region-id="central_steppes" data-name="Central Steppes">
+                    <rect x="700" y="180" width="300" height="200" rx="16" ry="16" class="region-tile region-central_steppes" />
+                    <text x="850" y="270" class="region-label">Central Steppes</text>
+                  </g>
+                  <!-- Outer Mongolia (Light Yellow) -->
+                  <g class="region" data-region-id="outer_mongolia" data-name="Outer Mongolia">
+                    <rect x="760" y="400" width="300" height="160" rx="16" ry="16" class="region-tile region-outer_mongolia" />
+                    <text x="910" y="490" class="region-label">Outer Mongolia</text>
+                  </g>
+                  <!-- Siberian Frontier (Blue) -->
+                  <g class="region" data-region-id="siberian_frontier" data-name="Siberian Frontier">
+                    <rect x="980" y="40" width="160" height="280" rx="16" ry="16" class="region-tile region-siberian_frontier" />
+                    <text x="1060" y="180" class="region-label" transform="rotate(90 1060 180)">Siberian Frontier</text>
+                  </g>
+                </svg>
+                <div id="tooltip" class="tooltip" role="dialog" aria-hidden="true"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-content" data-tab-panel="table">
+            <div class="table-wrap">
+              <table class="data-table" id="pres-table">
+                <thead>
+                  <tr>
+                    <th>Region</th>
+                    <th>Candidate</th>
+                    <th>Party</th>
+                    <th>Campaign Points</th>
+                    <th>Votes</th>
+                    <th>Final %</th>
+                    <th>Leader</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-duma" class="view">
+          <div class="toolbar">
+            <input id="seat-search" type="search" placeholder="Search seats..." />
+          </div>
+          <div id="duma-grid" class="cards-grid"></div>
+        </section>
+
+        <section id="view-general" class="view">
+          <div class="split">
+            <div>
+              <h3>Presidential</h3>
+              <div id="general-pres" class="mini-map"></div>
+            </div>
+            <div>
+              <h3>State Duma</h3>
+              <div id="general-duma" class="mini-grid"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="view-prices" class="view">
+          <div class="doc">
+            <h2>Campaign Prices & Penalties</h2>
+            <p>Mock copy. Add your pricing tiers, action costs, and penalty rules here.</p>
+            <ul>
+              <li>Action A: 5 points</li>
+              <li>Action B: 10 points</li>
+              <li>Debuff – Media blackout: -15% campaign points</li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="view-rulebook" class="view">
+          <div class="doc">
+            <h2>CEC Rulebook</h2>
+            <p>Mock copy. Add official rules, eligibility, and procedures here.</p>
+          </div>
+        </section>
+
+        <section id="view-how" class="view">
+          <div class="doc">
+            <h2>How to Campaign</h2>
+            <p>Mock copy. Add guidelines and best practices here.</p>
+          </div>
+        </section>
+
+        <section id="view-calendar" class="view">
+          <div class="doc">
+            <h2>Calendar & Updates</h2>
+            <p>Mock copy. Add key dates and news updates here.</p>
+          </div>
+        </section>
+
+        <section id="view-admin" class="view">
+          <div class="admin-layout">
+            <div class="admin-form">
+              <h2>Admin — Live Input</h2>
+              <p>Update campaign points and votes. This mock persists in-memory only.</p>
+
+              <div class="form-row">
+                <label for="admin-scope">Scope</label>
+                <select id="admin-scope">
+                  <option value="presidential">Presidential (Region)</option>
+                  <option value="duma">State Duma (Seat)</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <label for="admin-target">Target</label>
+                <select id="admin-target"></select>
+              </div>
+
+              <div id="admin-candidates"></div>
+
+              <div class="form-actions">
+                <button id="admin-save" class="btn primary">Save Changes</button>
+              </div>
+            </div>
+
+            <div class="admin-preview">
+              <h3>Preview</h3>
+              <div id="admin-preview-panel"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
